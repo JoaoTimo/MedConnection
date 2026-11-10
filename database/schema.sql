@@ -52,3 +52,37 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_horario_ativo
 CREATE INDEX IF NOT EXISTS ix_horarios_medico      ON horarios(medico_id);
 CREATE INDEX IF NOT EXISTS ix_agendamentos_paciente ON agendamentos(paciente_id);
 CREATE INDEX IF NOT EXISTS ix_medicos_especialidade ON medicos(especialidade_id);
+
+-- ===== api-historico =====
+-- Status possíveis, salvos no banco
+CREATE TABLE IF NOT EXISTS status_consulta (
+  nome TEXT PRIMARY KEY
+);
+INSERT INTO status_consulta (nome) VALUES
+  ('agendada'), ('realizada'), ('cancelada'), ('faltou')
+ON CONFLICT (nome) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS consultas (
+  id             INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  agendamento_id INTEGER NOT NULL UNIQUE,          -- id do agendamento na API de agenda
+  paciente_id    INTEGER NOT NULL,                 -- vem do token (campo "sub")
+  medico         TEXT NOT NULL,
+  especialidade  TEXT NOT NULL,
+  data_hora      TEXT NOT NULL                     -- formato: AAAA-MM-DD HH:MM
+                 CHECK (data_hora ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}$'),
+  status         TEXT NOT NULL DEFAULT 'agendada' REFERENCES status_consulta(nome),
+  atualizado_em  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_consultas_paciente ON consultas(paciente_id, data_hora);
+
+-- ===== api-notificacoes =====
+CREATE TABLE IF NOT EXISTS notificacoes (
+  id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  paciente_id INTEGER NOT NULL,
+  tipo        TEXT NOT NULL CHECK (tipo IN ('lembrete', 'cancelamento', 'alteracao', 'confirmacao')),
+  mensagem    TEXT NOT NULL,
+  enviada_em  TIMESTAMPTZ NOT NULL DEFAULT now(),   -- registro de envio
+  lida        BOOLEAN NOT NULL DEFAULT FALSE,
+  excluida    BOOLEAN NOT NULL DEFAULT FALSE        -- exclusão lógica: o registro de envio é mantido
+);
+CREATE INDEX IF NOT EXISTS ix_notif_paciente ON notificacoes(paciente_id);
